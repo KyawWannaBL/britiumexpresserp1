@@ -1,0 +1,39 @@
+type User @table {
+  displayName: String!
+  email: String!
+  userType: String!
+  createdAt: Timestamp!
+  phoneNumber: String
+  address: String
+}
+
+type Shipment @table {
+  trackingNumber: String!
+  description: String!
+  currentStatus: String!
+  createdAt: Timestamp!
+  senderAddress: String
+  recipientAddress: String
+  estimatedDeliveryDate: Date
+  sender: User
+  recipient: User
+  deliveryPersonnel: User
+}
+
+type StatusUpdate @table {
+  status: String!
+  timestamp: Timestamp!
+  location: String
+  notes: String
+  shipment: Shipment
+}
+
+type Notification @table {
+  message: String!
+  type: String!
+  isRead: Boolean!
+  createdAt: Timestamp!
+  deliveryMethod: String
+  user: User
+  shipment: Shipment
+}

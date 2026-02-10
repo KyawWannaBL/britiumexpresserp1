@@ -1,0 +1,172 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Single fetch point for caller's user doc
+    function me() {
+      return isAuthenticated()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : null;
+    }
+
+    function isActive(u) {
+      return u != null && u.status == 'active';
+    }
+
+    function pos(u) {
+      return u == null
+        ? null
+        : (u.position != null ? u.position : (u.pos != null ? u.pos : null));
+    }
+
+    function hasRole(u, roles) {
+      return isActive(u) && (u.role in roles || u.role == 'super_admin');
+    }
+
+    function isSuperAdmin(u) { return isActive(u) && u.role == 'super_admin'; }
+    function isAdmin(u)      { return hasRole(u, ['admin']); }
+    function isManager(u)    { return hasRole(u, ['manager', 'admin']); }
+    function isAccountant(u) { return hasRole(u, ['accountant', 'admin']); }
+    function isWarehouse(u)  { return hasRole(u, ['warehouse', 'admin']); }
+    function isRider(u)      { return hasRole(u, ['rider', 'admin']); }
+    function isDispatch(u)   { return hasRole(u, ['dispatch', 'admin']); }
+
+    // Exclude data_registerer from customer_service powers
+    function isCustomerService(u) {
+      return hasRole(u, ['customer_service', 'admin']) && pos(u) != 'data_registerer';
+    }
+
+    function isHR(u)        { return hasRole(u, ['hr', 'admin']); }
+    function isQA(u)        { return hasRole(u, ['qa', 'admin']); }
+    function isBIAnalyst(u) { return hasRole(u, ['bi_analyst', 'admin']); }
+
+    function isBranchManager(u) { return hasRole(u, ['manager', 'admin']) && pos(u) == 'branch_manager'; }
+    function isSupervisor(u)    { return hasRole(u, ['manager', 'admin']) && pos(u) == 'supervisor'; }
+
+    function isDataRegisterer(u) {
+      return isActive(u)
+        && pos(u) == 'data_registerer'
+        && (u.role in ['customer_service', 'admin', 'manager'] || u.role == 'super_admin');
+    }
+
+    // -------------------------
+    // Permission helpers (✅ let is allowed here)
+    // -------------------------
+    function canReadUser(userId) {
+      let u = me();
+      return isAuthenticated()
+        && isActive(u)
+        && (request.auth.uid == userId || isAdmin(u) || isSuperAdmin(u));
+    }
+
+    function canSuperAdminWriteUsers() {
+      let u = me();
+      return isAuthenticated() && isSuperAdmin(u);
+    }
+
+    function canAdminCreateUser() {
+      let u = me();
+      return isAuthenticated()
+        && isAdmin(u)
+        && request.resource.data.role != 'super_admin';
+    }
+
+    function canAdminUpdateUser() {
+      let u = me();
+      return isAuthenticated()
+        && isAdmin(u)
+        && resource.data.role != 'super_admin'
+        && request.resource.data.role != 'super_admin';
+    }
+
+    function canSelfUpdateUser(userId) {
+      let u = me();
+      return isAuthenticated()
+        && isActive(u)
+        && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['role', 'status', 'branch_location', 'position', 'pos']);
+    }
+
+    function canReadShipments() {
+      let u = me();
+      return isAuthenticated()
+        && (isAdmin(u) || isSuperAdmin(u) || isManager(u) || isCustomerService(u) || isDispatch(u) || isWarehouse(u));
+    }
+
+    function canCreateShipments() {
+      let u = me();
+      return isAuthenticated()
+        && (isAdmin(u) || isSuperAdmin(u) || isManager(u) || isCustomerService(u) || isDataRegisterer(u));
+    }
+
+    function canAdminUpdateShipment() {
+      let u = me();
+      return isAuthenticated() && (isAdmin(u) || isSuperAdmin(u));
+    }
+
+    function canWarehouseUpdateShipment() {
+      let u = me();
+      return isAuthenticated()
+        && isWarehouse(u)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'warehouse_notes', 'scanned_at', 'sorted_at']);
+    }
+
+    function canRiderUpdateShipment() {
+      let u = me();
+      return isAuthenticated()
+        && isRider(u)
+        && resource.data.assigned_rider == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'delivery_notes', 'delivered_at', 'signature', 'delivery_photo']);
+    }
+
+    function canDispatchUpdateShipment() {
+      let u = me();
+      return isAuthenticated()
+        && isDispatch(u)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['assigned_rider', 'route', 'estimated_delivery', 'dispatch_notes']);
+    }
+
+    // -------------------------
+    // Collections
+    // -------------------------
+    match /users/{userId} {
+      allow read:   if canReadUser(userId);
+
+      allow write:  if canSuperAdminWriteUsers();
+
+      allow create: if canAdminCreateUser();
+
+      allow update: if canAdminUpdateUser();
+
+      allow update: if canSelfUpdateUser(userId);
+    }
+
+    match /shipments/{shipmentId} {
+      // data_registerer cannot read shipments (excluded via isCustomerService + read rule)
+      allow read: if canReadShipments();
+
+      // data_registerer can create shipments
+      allow create: if canCreateShipments();
+
+      // admin full update
+      allow update: if canAdminUpdateShipment();
+
+      // restricted updates
+      allow update: if canWarehouseUpdateShipment();
+      allow update: if canRiderUpdateShipment();
+      allow update: if canDispatchUpdateShipment();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

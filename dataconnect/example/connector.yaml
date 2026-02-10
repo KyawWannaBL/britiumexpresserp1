@@ -1,0 +1,23 @@
+connectorId: example
+generate:
+  kotlinSdk:
+    - outputDir: ..\..\android\capacitor-cordova-android-plugins\src\main\kotlin
+      package: com.google.firebase.dataconnect.generated
+    - outputDir: ..\..\android\app\src\main\kotlin
+      package: com.google.firebase.dataconnect.generated
+  adminNodeSdk:
+    - outputDir: ..\..\src\dataconnect-admin-generated
+      package: "@dataconnect/admin-generated"
+      packageJsonDir: ..\..
+    - outputDir: ..\..\functions\src\dataconnect-admin-generated
+      package: "@dataconnect/admin-generated"
+      packageJsonDir: ..\..\functions
+    - outputDir: ..\..\britiumexpress1\src\dataconnect-admin-generated
+      package: "@dataconnect/admin-generated"
+      packageJsonDir: ..\..\britiumexpress1
+  javascriptSdk:
+    - outputDir: ..\..\src\dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ..\..
+      react: true
+      angular: false
