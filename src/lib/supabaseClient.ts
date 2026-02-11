@@ -16,3 +16,4 @@ export const supabase = {
     upsert: () => Promise.resolve({ data: null, error: null }),
   }),
 };
+
